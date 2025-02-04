@@ -27,7 +27,6 @@ def get_db_connection():
     return connection
 
 # Create the 'tasks' table if it doesn't exist
-# Create the 'users' table if it doesn't exist
 def create_tasks_table_if_not_exists():
     connection = get_db_connection()
     cursor = connection.cursor()
@@ -36,7 +35,6 @@ def create_tasks_table_if_not_exists():
             task_id SERIAL PRIMARY KEY,
             task_title TEXT NOT NULL UNIQUE,
             task_description TEXT NOT NULL UNIQUE,
-            task_status TEXT NOT NULL,
             user_id INT NOT NULL
         );
     """)
@@ -44,6 +42,7 @@ def create_tasks_table_if_not_exists():
     cursor.close()
     connection.close()
 
+# Create the 'users' table if it doesn't exist
 def create_users_table_if_not_exists():
     connection = get_db_connection()
     cursor = connection.cursor()
@@ -70,108 +69,44 @@ def encode_password(password):
 def check_password(hashed_password,password):
     return bcrypt.check_password_hash(hashed_password, password)
 
+def decode_token(jwt_token):
+    try:
+        decoded_token_payload = jwt.decode(jwt_token, SECRET_KEY, algorithms=["HS256"])
+        return decoded_token_payload
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token has expired!"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Invalid token!"}), 401
+
 @app.route('/register-tasks', methods=['POST'])
 def register_tasks():
     task_title = request.json['task_title']
     task_description = request.json['task_description']
-    task_status = request.json['task_status']
-    user_id = request.args.get('user_id')
-
+    jwt_token = request.headers.get('Authorization')
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
     connection = get_db_connection()
     cursor = connection.cursor()
-
     cursor.execute("""
-            INSERT INTO tasks (task_title, task_description, task_status, user_id) VALUES (%s, %s, %s, %s);
-        """, (task_title, task_description, task_status, user_id))
-    
+            INSERT INTO tasks (task_title, task_description, user_id) VALUES (%s, %s, %s);
+        """, (task_title, task_description, user_id))
     connection.commit()
     cursor.close()
     connection.close()
     return jsonify ({"message": "Task registered successfully"}),  201
 
-@app.route('/get-all-tasks', methods=['GET'])
-def get_all_tasks():
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    cursor.execute("""
-        SELECT * FROM tasks;
-    """      
-    )
-    tasks = cursor.fetchall()
-    cursor.close()
-    connection.close()
-
-    result = [{"task_id": each_task[0], "task_title": each_task[1], "task_description": each_task[2], "task_status": each_task[3]}for each_task in tasks]
-    return jsonify(result), 200
-
-@app.route('/update-task-status', methods=['PUT'])
-def update_taskstatus():
-    task_id = request.args.get('task_id')
-    user_id = request.args.get('user_id')
-    task_status = request.json['task_status']
-
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    
-    cursor.execute("""
-                       UPDATE tasks
-                          SET task_status = %s    WHERE task_id = %s AND user_id = %s;
-               """, ( task_status, task_id, user_id)) # type: ignore
-
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-    return jsonify({"message": "task updated successfully"}), 200   
-
-@app.route('/delete-by-task-id', methods=['DELETE'])
-def delete_task():
-    task_id = request.args.get('task_id')
-    user_id = request.args.get('user_id')
-
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    query = "DELETE FROM tasks WHERE task_id = " + task_id + "AND user_id = " +user_id
-
-    cursor.execute(query)
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-    return jsonify({"message": "Successfully deleted given task"})
-
-@app.route('/get-tasks-by-userid', methods=['GET'])
-def get_tasks_by_userid():
-    user_id = request.args.get('user_id')
-
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    query = "SELECT * from tasks WHERE user_id=" +user_id
-    cursor.execute(query)
-    tasks = cursor.fetchall()
-    cursor.close()
-    connection.close()
-
-    result = [{"task_id": each_task[0], "task_title": each_task[1], "task_description": each_task[2], "user_id": each_task[3]}for each_task in tasks]
-    return jsonify(result), 200
-
 @app.route('/register-users', methods=['POST'])
 def register_user():
     user_id = request.json['user_id']
     username = request.json['username']
+    team = request.json['team']
     password = request.json['password']
     hashed_password = encode_password(password)
-    team = request.json['team']
-
     connection = get_db_connection()
     cursor = connection.cursor()
-
     cursor.execute("""
             INSERT INTO users (user_id, username, password,team) VALUES (%s, %s, %s, %s);
         """, (user_id, username, hashed_password,team))
-    
     connection.commit()
     cursor.close()
     connection.close()
@@ -207,65 +142,111 @@ def login_user():
         "token": token
     }), 200
 
-@app.route('/get-user-by-userid', methods=['GET'])
-def get_user_by_userid():
-    user_id = request.args.get('user_id')
+@app.route('/delete-by-userid', methods=['DELETE'])
+def delete_user():
+    jwt_token = request.headers('Authorization')
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
     connection = get_db_connection()
     cursor = connection.cursor()
-    query = "SELECT * FROM users WHERE user_id = " + user_id
+    query = "DELETE FROM users WHERE user_id = " + str(user_id)
+    cursor.execute(query)
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return jsonify({"message": "Successfully deleted the given user"})
+
+
+@app.route('/get-user-by-userid', methods=['GET'])
+def get_user_by_userid():
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    query = "SELECT * FROM users WHERE user_id = "+ str(user_id)
     cursor.execute(query)
     user = cursor.fetchone()
     cursor.close()
     connection.close()
     if user:
         result = {
-            "user_id": user[0],
-            "username": user [1],
-            "password": user[2],
-            "team": user[3]
+            "username": user [0],
+            "password": user[1],
+            "team": user[2]
         }
         return jsonify(result), 200
     else:
         return jsonify({"error": "user not found"}), 404
-    
-@app.route('/update-user', methods=['PUT'])
-def update_user():
-    user_id = request.args.get('user_id')
-    username = request.json['username']
-    password = request.json['password']
-    team = request.json['team']
 
+@app.route('/get-all-tasks', methods=['GET'])
+def get_all_tasks():
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
     connection = get_db_connection()
     cursor = connection.cursor()
-    
     cursor.execute("""
-                       UPDATE users
-                          SET username = %s, password = %s, team = %s    WHERE user_id = %s;
-               """, (username, password, team, user_id))
-
-    connection.commit()
+        SELECT * FROM tasks;
+    """      
+    )
+    tasks = cursor.fetchall()
     cursor.close()
     connection.close()
+    result = [{"task_id": each_task[0], "task_title": each_task[1], "task_description": each_task[2], "task_status": each_task[3]}for each_task in tasks]
+    return jsonify(result), 200
 
-    return jsonify({"message": "User updated successfully"}), 200 
-
-
-
-@app.route('/delete-by-userid', methods=['DELETE'])
-def delete_user():
-    user_id = request.args.get('user_id')
-
+@app.route('/delete-by-task-id', methods=['DELETE'])
+def delete_task():
+    task_id = request.args.get('task_id')
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
     connection = get_db_connection()
     cursor = connection.cursor()
-
-    query = "DELETE FROM users WHERE user_id = " + user_id
-
+    query = "DELETE FROM tasks WHERE task_id = " + str(task_id) + " AND user_id = " + str(user_id)
     cursor.execute(query)
     connection.commit()
     cursor.close()
     connection.close()
+    return jsonify({"message": "Successfully deleted given task"})
 
-    return jsonify({"message": "Successfully deleted the given user"})
+@app.route('/get-tasks-by-userid', methods=['GET'])
+def get_tasks_by_userid():
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    query = "SELECT * FROM tasks WHERE user_id = "+ str(user_id)
+    cursor.execute(query)
+    tasks = cursor.fetchall()
+    cursor.close()
+    connection.close()
+    result = [{"task_id": each_task[0], "task_title": each_task[1], "task_description": each_task[2], "user_id": each_task[3]}for each_task in tasks]
+    return jsonify(result), 200
 
+@app.route('/get-single-task', methods=['GET'])
+def get_single_task():
+    task_id = request.args.get('task_id')
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    task_id = decoded_token_payload['task_id']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    query = "SELECT * FROM tasks WHERE task_id = "+ str(task_id)
+    cursor.execute(query)
+    task = cursor.fetchone()
+    cursor.close()
+    connection.close()
+    if task:
+        result = {
+            "task_id": task[0],
+            "task_title": task[1],
+            "task_description": task[2],
+            "user_id": task[3]
+        }
+        return jsonify(result), 200
+    else:
+        return jsonify({"error": "Task not found"}), 404
 if __name__ == '__main__':
     app.run(debug=True)
