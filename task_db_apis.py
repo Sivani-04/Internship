@@ -2,6 +2,8 @@ from flask import Flask,jsonify, request
 import psycopg2 # type: ignore # pip install psycopg2
 from psycopg2 import sql # type: ignore
 from flask_bcrypt import Bcrypt # type: ignore # pip install 
+import jwt # pip install pyjwt
+import datetime
 
 app = Flask(__name__)
 
@@ -10,6 +12,9 @@ DB_HOST = 'localhost'
 DB_NAME = 'postgres'
 DB_USER = 'postgres'
 DB_PASSWORD = 'POSTGRESQL'
+
+# Your secret key to sign JWT tokens
+SECRET_KEY = "this is a secret key this is a secret keyyyy!!!!"
 
 # Function to get a database connection
 def get_db_connection():
@@ -172,6 +177,36 @@ def register_user():
     connection.close()
     return jsonify ({"message": "User registered successfully"}),  201
 
+@app.route('/login', methods=['POST'])
+def login_user():
+    username = request.json['username']
+    password = request.json['password']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    # Check if the username exists
+    cursor.execute("SELECT * FROM users WHERE username = %s;", (username,))
+    user = cursor.fetchone()
+    # If the user does not exist
+    if user is None:
+        return jsonify({"message": "Invalid username or password."}), 401
+    stored_hashed_password = user[2]
+    # Compare the stored hashed password with the provided password
+    if not check_password(stored_hashed_password, password):
+        return jsonify({"message": "Invalid username or password."}), 401
+    payload = {
+        'username': username,
+        'user_id': user[0],
+        'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expiration time
+    }
+    # Generate the token
+    token = jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    cursor.close()
+    connection.close()
+    return jsonify({
+        "message": "Login successful.",
+        "token": token
+    }), 200
+
 @app.route('/get-user-by-userid', methods=['GET'])
 def get_user_by_userid():
     user_id = request.args.get('user_id')
@@ -213,6 +248,8 @@ def update_user():
     connection.close()
 
     return jsonify({"message": "User updated successfully"}), 200 
+
+
 
 @app.route('/delete-by-userid', methods=['DELETE'])
 def delete_user():
