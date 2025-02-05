@@ -134,7 +134,6 @@ def login_user():
     # Check if the username exists
     cursor.execute("SELECT * FROM users WHERE username = %s;", (username,))
     user = cursor.fetchone()
-    category = cursor.fetchone()
     # If the user does not exist
     if user is None:
         return jsonify({"message": "Invalid username or password."}), 401
@@ -145,7 +144,6 @@ def login_user():
     payload = {
         'username': username,
         'user_id': user[0],
-        'category_id': category[0], # type: ignore
         'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=1)  # Token expiration time
     }
     # Generate the token
@@ -156,6 +154,42 @@ def login_user():
         "message": "Login successful.",
         "token": token
     }), 200
+
+@app.route('/delete-by-userid', methods=['DELETE'])
+def delete_user():
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    query = "DELETE FROM users WHERE user_id = " + str(user_id)
+    cursor.execute(query)
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return jsonify({"message": "Successfully deleted the given user"})
+
+@app.route('/get-user-by-userid', methods=['GET'])
+def get_user_by_userid():
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    query = "SELECT * FROM users WHERE user_id = "+ str(user_id)
+    cursor.execute(query)
+    user = cursor.fetchone()
+    cursor.close()
+    connection.close()
+    if user:
+        result = {
+            "username": user [0],
+            "password": user[1],
+            "team": user[2]
+        }
+        return jsonify(result), 200
+    else:
+        return jsonify({"error": "user not found"}), 404
 
 @app.route('/add-categories', methods=['POST'])
 def register_categories():
@@ -170,29 +204,38 @@ def register_categories():
     connection.commit()
     cursor.close()
     connection.close()
-    return jsonify ({"message": "User registered successfully"}),  201
-
-@app.route('/get-category-by-categoryid', methods=['GET'])
-def get_category_by_categoryid():
-    jwt_token = request.headers['Authorization']
-    decoded_token_payload = decode_token(jwt_token)
-    category_id = decoded_token_payload['category_id']
+    return jsonify ({"message": "Category registered successfully"}),  201
+    
+@app.route('/add-products', methods=['POST'])
+def register_products():
+    product_id = request.json['product_id']    
+    product_name = request.json['product_name']
+    product_description = request.json['product_description']
+    product_price = request.json['product_price']
     connection = get_db_connection()
     cursor = connection.cursor()
-    query = "SELECT * FROM categories WHERE category_id = "+ str(category_id)
-    cursor.execute(query)
-    category = cursor.fetchone()
+    cursor.execute("""
+            INSERT INTO products (product_id, product_name, product_description, product_price) VALUES (%s, %s, %s, %s);
+        """, (product_id, product_name, product_description, product_price))
+    connection.commit()
     cursor.close()
     connection.close()
-    if category:
-        result = {
-            "category_id": category[0],
-            "category_name": category[1],
-            "category_description": category[2]
-        }
-        return jsonify(result), 200
-    else:
-        return jsonify({"error": "user not found"}), 404
+    return jsonify ({"message": "Product registered successfully"}),  201
+
+@app.route('/add-reviews', methods=['POST'])
+def register_reviews():
+    product_id = request.json['product_id']    
+    user_id = request.json['user_id']
+    review_text = request.json['review_text']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    cursor.execute("""
+            INSERT INTO reviews (product_id, user_id, review_text) VALUES (%s, %s, %s);
+        """, (product_id, user_id, review_text))
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return jsonify ({"message": "Review registered successfully"}),  201
 
 if __name__ == "__main__":
     app.run(debug=True)
