@@ -248,5 +248,6 @@ def get_single_task():
         return jsonify(result), 200
     else:
         return jsonify({"error": "Task not found"}), 404
+    
 if __name__ == '__main__':
     app.run(debug=True)
