@@ -81,7 +81,7 @@ def create_reviews_table_if_not_exists():
     cursor = connection.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reviews (
-            user_id SERIAL PRIMARY KEY,
+            user_id INT NOT NULL,
             product_id INT NOT NULL,
             review_text TEXT NOT NULL
         );
@@ -256,6 +256,7 @@ def get_reviews_by_userid():
     connection.close()
     result = [{"user_id": each_review[0], "product_id": each_review[1], "review_text": each_review[2]}for each_review in reviews]
     return jsonify(result), 200
+
 
 if __name__ == "__main__":
     app.run(debug=True)
