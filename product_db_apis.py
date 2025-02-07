@@ -50,8 +50,7 @@ def create_categories_table_if_not_exists():
         CREATE TABLE IF NOT EXISTS categories (
             category_id SERIAL PRIMARY KEY,
             category_name TEXT NOT NULL UNIQUE,
-            category_description TEXT NOT NULL,
-            product_id INT NOT NULL
+            category_description TEXT NOT NULL
         );
     """)
     connection.commit()
@@ -68,7 +67,8 @@ def create_products_table_if_not_exists():
             product_name TEXT NOT NULL UNIQUE,
             product_description TEXT NOT NULL,
             product_price INT NOT NULL,
-            category_id INT NOT NULL
+            category_id INT NOT NULL,
+            user_id INT NOT NULL
         );
     """)
     connection.commit()
@@ -187,8 +187,7 @@ def get_user_by_userid():
     if user:
         result = {
             "username": user [0],
-            "password": user[1],
-            "team": user[2]
+            "password": user[1]
         }
         return jsonify(result), 200
     else:
