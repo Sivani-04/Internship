@@ -4,6 +4,7 @@ from psycopg2 import sql # type: ignore
 from flask_bcrypt import Bcrypt # type: ignore # pip install 
 import jwt # pip install pyjwt
 import datetime
+from flask_jwt_extended import get_jwt_identity
 
 app = Flask(__name__)
 
@@ -49,7 +50,8 @@ def create_categories_table_if_not_exists():
         CREATE TABLE IF NOT EXISTS categories (
             category_id SERIAL PRIMARY KEY,
             category_name TEXT NOT NULL UNIQUE,
-            category_description TEXT NOT NULL
+            category_description TEXT NOT NULL,
+            product_id INT NOT NULL
         );
     """)
     connection.commit()
@@ -65,7 +67,8 @@ def create_products_table_if_not_exists():
             product_id SERIAL PRIMARY KEY,
             product_name TEXT NOT NULL UNIQUE,
             product_description TEXT NOT NULL,
-            product_price INT NOT NULL       
+            product_price INT NOT NULL,
+            category_id INT NOT NULL
         );
     """)
     connection.commit()
@@ -196,11 +199,12 @@ def register_categories():
     category_id = request.json['category_id']    
     category_name = request.json['category_name']
     category_description = request.json['category_description']
+    product_id = request.json['product_id']
     connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute("""
-            INSERT INTO categories (category_id, category_name, category_description) VALUES (%s, %s, %s);
-        """, (category_id, category_name, category_description))
+            INSERT INTO categories (category_id, category_name, category_description, product_id) VALUES (%s, %s, %s, %s);
+        """, (category_id, category_name, category_description, product_id))
     connection.commit()
     cursor.close()
     connection.close()
@@ -212,11 +216,12 @@ def register_products():
     product_name = request.json['product_name']
     product_description = request.json['product_description']
     product_price = request.json['product_price']
+    category_id = request.json['category_id']
     connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute("""
-            INSERT INTO products (product_id, product_name, product_description, product_price) VALUES (%s, %s, %s, %s);
-        """, (product_id, product_name, product_description, product_price))
+            INSERT INTO products (product_id, product_name, product_description, product_price, category_id) VALUES (%s, %s, %s, %s, %s);
+        """, (product_id, product_name, product_description, product_price, category_id))
     connection.commit()
     cursor.close()
     connection.close()
@@ -236,6 +241,21 @@ def register_reviews():
     cursor.close()
     connection.close()
     return jsonify ({"message": "Review registered successfully"}),  201
+
+@app.route('/get-reviews-by-userid', methods=['GET'])
+def get_reviews_by_userid():
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    query = "SELECT * FROM reviews WHERE user_id = "+ str(user_id)
+    cursor.execute(query)
+    reviews = cursor.fetchall()
+    cursor.close()
+    connection.close()
+    result = [{"user_id": each_review[0], "product_id": each_review[1], "review_text": each_review[2]}for each_review in reviews]
+    return jsonify(result), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
