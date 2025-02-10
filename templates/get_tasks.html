@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Tasks</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .task {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .task h3 {
+            margin-top: 0;
+        }
+        .task p {
+            margin-bottom: 5px;
+        }
+        .task button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+        .task button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Your Tasks</h1>
+        <div id="tasksList"></div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Fetch tasks and display them
+            fetchTasks();
+        });
+
+        function fetchTasks() {
+            fetch('/get-user-tasks', {
+                method: 'GET',
+                headers: {
+                    'Authorization': localStorage.getItem('token')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log(data);
+                displayTasks(data);
+            })
+            .catch(error => {
+                console.error('Failed to fetch tasks:', error);
+                // Handle error (show error message to user)
+            });
+        }
+
+        function displayTasks(tasks) {
+            const tasksList = document.getElementById('tasksList');
+            if (tasks.error) {
+                tasksList.innerHTML = `<p>${tasks.error}</p>`;
+            } else {
+                tasksList.innerHTML = ''; // Clear previous content
+                tasks.forEach(task => {
+                    const taskDiv = document.createElement('div');
+                    taskDiv.classList.add('task');
+                    taskDiv.innerHTML = `
+                        <h3>${task.task_name}</h3>
+                        <p><strong>Task ID:</strong> ${task.task_id}</p>
+                        <p><strong>Status:</strong> ${task.task_status}</p>
+                        <button onclick="updateTask(${task.task_id})">Update Task</button>
+                    `;
+                    tasksList.appendChild(taskDiv);
+                });
+            }
+        }
+
+        function updateTask(taskId) {
+            const task_status = prompt("Enter updated task status:");
+            if (task_status !== null && task_status.trim() !== '') {
+                fetch('/update-task', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': localStorage.getItem('token')
+                    },
+                    body: JSON.stringify({ task_id: taskId, task_status: task_status })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    fetchTasks(); // Refresh tasks after update
+                })
+                .catch(error => {
+                    console.error('Failed to update task:', error);
+                    // Handle error (show error message to user)
+                });
+            }
+        }
+    </script>
+</body>
+</html>
