@@ -1,17 +1,17 @@
-from flask import Flask,jsonify, request
-import psycopg2 # type: ignore # pip install psycopg2
-from psycopg2 import sql # type: ignore
-from flask_bcrypt import Bcrypt # type: ignore # pip install 
+from flask import Flask, jsonify, request, render_template
+import psycopg2  # pip install psycopg2
+from psycopg2 import sql
+from flask_bcrypt import Bcrypt # pip install flask-bcrypt
 import jwt # pip install pyjwt
 import datetime
 
-app = Flask(__name__)
+app = Flask(__name__) 
 
-#Database connection configuaration
+# Database connection configuration
 DB_HOST = 'localhost'
 DB_NAME = 'postgres'
 DB_USER = 'postgres'
-DB_PASSWORD = 'POSTGRESQL'
+DB_PASSWORD = 'postgres'
 
 # Your secret key to sign JWT tokens
 SECRET_KEY = "this is a secret key this is a secret keyyyy!!!!"
@@ -19,10 +19,10 @@ SECRET_KEY = "this is a secret key this is a secret keyyyy!!!!"
 # Function to get a database connection
 def get_db_connection():
     connection = psycopg2.connect(
-        host = DB_HOST,
-        database = DB_NAME, 
-        user = DB_USER,
-        password = DB_PASSWORD
+        host=DB_HOST,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD
     )
     return connection
 
@@ -33,8 +33,8 @@ def create_tasks_table_if_not_exists():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS tasks (
             task_id SERIAL PRIMARY KEY,
-            task_title TEXT NOT NULL UNIQUE,
-            task_description TEXT NOT NULL UNIQUE,
+            task_name TEXT NOT NULL,
+            task_status TEXT NOT NULL,
             user_id INT NOT NULL
         );
     """)
@@ -51,7 +51,7 @@ def create_users_table_if_not_exists():
             user_id SERIAL PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,
             password TEXT NOT NULL,
-            team TEXT NOT NULL UNIQUE
+            team TEXT NOT NULL
         );
     """)
     connection.commit()
@@ -66,7 +66,7 @@ bcrypt = Bcrypt()
 def encode_password(password):
     return bcrypt.generate_password_hash(password).decode('utf-8')
 
-def check_password(hashed_password,password):
+def check_password(hashed_password, password):
     return bcrypt.check_password_hash(hashed_password, password)
 
 def decode_token(jwt_token):
@@ -78,26 +78,25 @@ def decode_token(jwt_token):
     except jwt.InvalidTokenError:
         return jsonify({"message": "Invalid token!"}), 401
 
-@app.route('/register-tasks', methods=['POST'])
-def register_tasks():
-    task_title = request.json['task_title']
-    task_description = request.json['task_description']
-    jwt_token = request.headers.get('Authorization')
+@app.route('/create-task', methods=['POST'])
+def create_task():
+    task_name = request.json['task_name']
+    task_status = request.json['task_status']
+    jwt_token = request.headers['Authorization']
     decoded_token_payload = decode_token(jwt_token)
     user_id = decoded_token_payload['user_id']
     connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute("""
-            INSERT INTO tasks (task_title, task_description, user_id) VALUES (%s, %s, %s);
-        """, (task_title, task_description, user_id))
+            INSERT INTO tasks (task_name, task_status, user_id) VALUES (%s, %s, %s);
+        """, (task_name, task_status, user_id))
     connection.commit()
     cursor.close()
     connection.close()
-    return jsonify ({"message": "Task registered successfully"}),  201
+    return jsonify({"message": "Task registered successfully."}), 201
 
-@app.route('/register-users', methods=['POST'])
+@app.route('/register-user', methods=['POST'])
 def register_user():
-    user_id = request.json['user_id']
     username = request.json['username']
     team = request.json['team']
     password = request.json['password']
@@ -105,12 +104,12 @@ def register_user():
     connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute("""
-            INSERT INTO users (user_id, username, password,team) VALUES (%s, %s, %s, %s);
-        """, (user_id, username, hashed_password,team))
+            INSERT INTO users (username, password, team) VALUES (%s, %s, %s);
+        """, (username, hashed_password, team))
     connection.commit()
     cursor.close()
     connection.close()
-    return jsonify ({"message": "User registered successfully"}),  201
+    return jsonify({"message": "User registered successfully."}), 201
 
 @app.route('/login', methods=['POST'])
 def login_user():
@@ -142,9 +141,9 @@ def login_user():
         "token": token
     }), 200
 
-@app.route('/delete-by-userid', methods=['DELETE'])
+@app.route('/delete-by-user-id', methods=['DELETE'])
 def delete_user():
-    jwt_token = request.headers('Authorization')
+    jwt_token = request.headers['Authorization']
     decoded_token_payload = decode_token(jwt_token)
     user_id = decoded_token_payload['user_id']
     connection = get_db_connection()
@@ -154,11 +153,11 @@ def delete_user():
     connection.commit()
     cursor.close()
     connection.close()
-    return jsonify({"message": "Successfully deleted the given user"})
+    return jsonify({"message": "Successfully deleted user"})
 
 
-@app.route('/get-user-by-userid', methods=['GET'])
-def get_user_by_userid():
+@app.route('/get-single-user', methods=['GET'])
+def get_single_user():
     jwt_token = request.headers['Authorization']
     decoded_token_payload = decode_token(jwt_token)
     user_id = decoded_token_payload['user_id']
@@ -171,13 +170,13 @@ def get_user_by_userid():
     connection.close()
     if user:
         result = {
-            "username": user [0],
-            "password": user[1],
-            "team": user[2]
+            "user_id": user[0],
+            "username": user[1],
+            "team": user[3]
         }
         return jsonify(result), 200
     else:
-        return jsonify({"error": "user not found"}), 404
+        return jsonify({"error": "User not found"}), 404
 
 @app.route('/get-all-tasks', methods=['GET'])
 def get_all_tasks():
@@ -187,13 +186,14 @@ def get_all_tasks():
     cursor = connection.cursor()
     cursor.execute("""
         SELECT * FROM tasks;
-    """      
+    """
     )
     tasks = cursor.fetchall()
     cursor.close()
     connection.close()
-    result = [{"task_id": each_task[0], "task_title": each_task[1], "task_description": each_task[2], "task_status": each_task[3]}for each_task in tasks]
+    result = [{"task_id": each_task[0], "task_name": each_task[1], "task_status": each_task[2], "user_id": each_task[3]} for each_task in tasks]
     return jsonify(result), 200
+
 
 @app.route('/delete-by-task-id', methods=['DELETE'])
 def delete_task():
@@ -208,10 +208,11 @@ def delete_task():
     connection.commit()
     cursor.close()
     connection.close()
-    return jsonify({"message": "Successfully deleted given task"})
+    return jsonify({"message": "Successfully deleted task"})
 
-@app.route('/get-tasks-by-userid', methods=['GET'])
-def get_tasks_by_userid():
+
+@app.route('/get-user-tasks', methods=['GET'])
+def get_user_tasks():
     jwt_token = request.headers['Authorization']
     decoded_token_payload = decode_token(jwt_token)
     user_id = decoded_token_payload['user_id']
@@ -222,7 +223,7 @@ def get_tasks_by_userid():
     tasks = cursor.fetchall()
     cursor.close()
     connection.close()
-    result = [{"task_id": each_task[0], "task_title": each_task[1], "task_description": each_task[2], "user_id": each_task[3]}for each_task in tasks]
+    result = [{"task_id": each_task[0], "task_name": each_task[1], "task_status": each_task[2], "user_id": each_task[3]} for each_task in tasks]
     return jsonify(result), 200
 
 @app.route('/get-single-task', methods=['GET'])
@@ -230,7 +231,6 @@ def get_single_task():
     task_id = request.args.get('task_id')
     jwt_token = request.headers['Authorization']
     decoded_token_payload = decode_token(jwt_token)
-    task_id = decoded_token_payload['task_id']
     connection = get_db_connection()
     cursor = connection.cursor()
     query = "SELECT * FROM tasks WHERE task_id = "+ str(task_id)
@@ -241,13 +241,63 @@ def get_single_task():
     if task:
         result = {
             "task_id": task[0],
-            "task_title": task[1],
-            "task_description": task[2],
+            "task_name": task[1],
+            "task_status": task[2],
             "user_id": task[3]
         }
         return jsonify(result), 200
     else:
         return jsonify({"error": "Task not found"}), 404
+
+@app.route('/update-task', methods=['PUT'])
+def update_task():
+    task_id = request.json['task_id']
+    task_status = request.json['task_status']
     
-if __name__ == '__main__':
-    app.run(debug=True)
+    jwt_token = request.headers['Authorization']
+    decoded_token_payload = decode_token(jwt_token)
+    user_id = decoded_token_payload['user_id']
+    
+    connection = get_db_connection()
+    cursor = connection.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE task_id = %s", (task_id,))
+    task = cursor.fetchone()
+
+    if task is None:
+        cursor.close()
+        connection.close()
+        return jsonify({"message": "Task not found"}), 404
+
+    if task[3] != user_id:
+        cursor.close()
+        connection.close()
+        return jsonify({"message": "Unauthorized. You cannot update this task."}), 403
+
+    cursor.execute("""
+        UPDATE tasks
+        SET task_status = %s
+        WHERE task_id = %s;
+    """, (task_status, task_id))
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return jsonify({"message": "Task updated successfully."}), 200
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/dashboard')
+def dashboard():
+    return render_template('dashboard.html')
+
+@app.route('/create')
+def create_task_view():
+    return render_template('create_task.html')
+
+@app.route('/get-tasks')
+def get_user_tasks_view():
+    return render_template('get_tasks.html')
+
+if __name__ == '__main__': 
+    app.run(debug=True) 
