@@ -4,7 +4,6 @@ from psycopg2 import sql # type: ignore
 from flask_bcrypt import Bcrypt # type: ignore # pip install 
 import jwt # pip install pyjwt
 import datetime
-from flask_jwt_extended import get_jwt_identity
 
 app = Flask(__name__)
 
@@ -67,8 +66,7 @@ def create_products_table_if_not_exists():
             product_name TEXT NOT NULL UNIQUE,
             product_description TEXT NOT NULL,
             product_price INT NOT NULL,
-            category_id INT NOT NULL,
-            user_id INT NOT NULL
+            category_id INT NOT NULL
         );
     """)
     connection.commit()
