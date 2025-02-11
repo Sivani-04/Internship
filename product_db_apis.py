@@ -1,3 +1,4 @@
+import json
 from flask import Flask,jsonify, request
 import psycopg2 # type: ignore # pip install psycopg2
 from psycopg2 import sql # type: ignore
@@ -79,6 +80,7 @@ def create_reviews_table_if_not_exists():
     cursor = connection.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS reviews (
+            review_id SERIAL PRIMARY KEY,
             user_id INT NOT NULL,
             product_id INT NOT NULL,
             review_text TEXT NOT NULL
@@ -193,15 +195,15 @@ def get_user_by_userid():
 
 @app.route('/add-categories', methods=['POST'])
 def register_categories():
-    category_id = request.json['category_id']    
+    data = request.get_json()    
+    category_id = data.get('category_id')
     category_name = request.json['category_name']
     category_description = request.json['category_description']
-    product_id = request.json['product_id']
     connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute("""
-            INSERT INTO categories (category_id, category_name, category_description, product_id) VALUES (%s, %s, %s, %s);
-        """, (category_id, category_name, category_description, product_id))
+            INSERT INTO categories (category_name, category_description) VALUES (%s, %s);
+        """, (category_name, category_description))
     connection.commit()
     cursor.close()
     connection.close()
@@ -209,7 +211,8 @@ def register_categories():
     
 @app.route('/add-products', methods=['POST'])
 def register_products():
-    product_id = request.json['product_id']    
+    data = request.get_json()    
+    product_id = data.get('product_id')   
     product_name = request.json['product_name']
     product_description = request.json['product_description']
     product_price = request.json['product_price']
@@ -217,8 +220,8 @@ def register_products():
     connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute("""
-            INSERT INTO products (product_id, product_name, product_description, product_price, category_id) VALUES (%s, %s, %s, %s, %s);
-        """, (product_id, product_name, product_description, product_price, category_id))
+            INSERT INTO products (product_name, product_description, product_price, category_id) VALUES (%s, %s, %s, %s);
+        """, (product_name, product_description, product_price, category_id))
     connection.commit()
     cursor.close()
     connection.close()
@@ -226,6 +229,8 @@ def register_products():
 
 @app.route('/add-reviews', methods=['POST'])
 def register_reviews():
+    data = request.get_json()    
+    review_id = data.get('review_id')
     product_id = request.json['product_id']    
     user_id = request.json['user_id']
     review_text = request.json['review_text']
@@ -251,9 +256,8 @@ def get_reviews_by_userid():
     reviews = cursor.fetchall()
     cursor.close()
     connection.close()
-    result = [{"user_id": each_review[0], "product_id": each_review[1], "review_text": each_review[2]}for each_review in reviews]
+    result = [{"review_id": each_review[0], "user_id": each_review[1], "product_id": each_review[2], "review_text": each_review[3]}for each_review in reviews]
     return jsonify(result), 200
-
 
 if __name__ == "__main__":
     app.run(debug=True)
