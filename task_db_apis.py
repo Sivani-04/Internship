@@ -300,4 +300,4 @@ def get_user_tasks_view():
     return render_template('get_tasks.html')
 
 if __name__ == '__main__': 
-    app.run(debug=True) 
+    app.run(debug=True, host="0.0.0.0") 
